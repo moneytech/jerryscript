@@ -29,6 +29,11 @@ STRING_VALUE (LIT_GLOBAL_SYMBOL_TO_STRING_TAG,
               LIT_MAGIC_STRING_GENERATOR_UL,
               ECMA_PROPERTY_FLAG_CONFIGURABLE)
 
+/* ECMA-262 v6, 25.2.3.1 */
+OBJECT_VALUE (LIT_MAGIC_STRING_CONSTRUCTOR,
+              ECMA_BUILTIN_ID_GENERATOR,
+              ECMA_PROPERTY_FLAG_CONFIGURABLE)
+
 /* Routine properties:
  *  (property name, C routine name, arguments number or NON_FIXED, value of the routine's length property) */
 ROUTINE (LIT_MAGIC_STRING_NEXT, ecma_builtin_generator_prototype_object_next, 1, 1)

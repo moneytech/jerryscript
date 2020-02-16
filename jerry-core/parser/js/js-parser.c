@@ -1614,6 +1614,14 @@ parser_post_processing (parser_context_t *context_p) /**< context */
     }
 
     tagged_base_p[-1] = (ecma_value_t) context_p->tagged_template_literal_cp;
+
+    ecma_collection_t *collection_p = ECMA_GET_INTERNAL_VALUE_POINTER (ecma_collection_t,
+                                                                       context_p->tagged_template_literal_cp);
+
+    for (uint32_t i = 0; i < collection_p->item_count; i++)
+    {
+      ecma_free_value (collection_p->buffer_p[i]);
+    }
   }
 #endif /* ENABLED (JERRY_ES2015) */
 
@@ -1907,7 +1915,20 @@ parser_parse_source (const uint8_t *arg_list_p, /**< function argument list */
     error_location_p->error = PARSER_ERR_NO_ERROR;
   }
 
-  context.status_flags = (arg_list_p == NULL) ? 0 : PARSER_IS_FUNCTION;
+  if (arg_list_p == NULL)
+  {
+    context.status_flags = 0;
+  }
+  else
+  {
+    context.status_flags = PARSER_IS_FUNCTION;
+#if ENABLED (JERRY_ES2015)
+    if (parse_opts & ECMA_PARSE_GENERATOR_FUNCTION)
+    {
+      context.status_flags |= PARSER_IS_GENERATOR_FUNCTION;
+    }
+#endif /* ENABLED (JERRY_ES2015) */
+  }
 
 #if ENABLED (JERRY_ES2015)
   context.status_flags |= PARSER_GET_CLASS_PARSER_OPTS (parse_opts);
@@ -1973,6 +1994,10 @@ parser_parse_source (const uint8_t *arg_list_p, /**< function argument list */
   if (parse_opts & ECMA_PARSE_DIRECT_EVAL)
   {
     context.status_flags |= PARSER_IS_EVAL;
+  }
+  if (parse_opts & ECMA_PARSE_FUNCTION)
+  {
+    context.status_flags |= PARSER_IS_FUNCTION;
   }
 #endif /* ENABLED (JERRY_ES2015) */
 
@@ -2169,7 +2194,7 @@ parser_parse_source (const uint8_t *arg_list_p, /**< function argument list */
 
   if (context.scope_stack_p != NULL)
   {
-    parser_free (context.scope_stack_p, context.scope_stack_size * sizeof (parser_scope_stack));
+    parser_free (context.scope_stack_p, context.scope_stack_size * sizeof (parser_scope_stack_t));
   }
 
 #if ENABLED (JERRY_PARSER_DUMP_BYTE_CODE)
@@ -2272,7 +2297,7 @@ parser_restore_context (parser_context_t *context_p, /**< context */
 
   if (context_p->scope_stack_p != NULL)
   {
-    parser_free (context_p->scope_stack_p, context_p->scope_stack_size * sizeof (parser_scope_stack));
+    parser_free (context_p->scope_stack_p, context_p->scope_stack_size * sizeof (parser_scope_stack_t));
   }
 
   /* Restore private part of the context. */
@@ -2543,7 +2568,7 @@ parser_raise_error (parser_context_t *context_p, /**< context */
 
     if (context_p->scope_stack_p != NULL)
     {
-      parser_free (context_p->scope_stack_p, context_p->scope_stack_size * sizeof (parser_scope_stack));
+      parser_free (context_p->scope_stack_p, context_p->scope_stack_size * sizeof (parser_scope_stack_t));
     }
     context_p->scope_stack_p = saved_context_p->scope_stack_p;
     context_p->scope_stack_size = saved_context_p->scope_stack_size;

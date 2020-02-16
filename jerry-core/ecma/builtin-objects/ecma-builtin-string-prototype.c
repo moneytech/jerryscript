@@ -208,9 +208,8 @@ ecma_builtin_string_prototype_object_concat (ecma_string_t *this_string_p, /**< 
                                              const ecma_value_t *argument_list_p, /**< arguments list */
                                              ecma_length_t arguments_number) /**< number of arguments */
 {
-  ecma_ref_ecma_string (this_string_p);
+  ecma_stringbuilder_t builder = ecma_stringbuilder_create_from (this_string_p);
 
-  ecma_string_t *string_to_return = this_string_p;
   /* 5 */
   for (uint32_t arg_index = 0; arg_index < arguments_number; ++arg_index)
   {
@@ -219,17 +218,17 @@ ecma_builtin_string_prototype_object_concat (ecma_string_t *this_string_p, /**< 
 
     if (JERRY_UNLIKELY (get_arg_string_p == NULL))
     {
-      ecma_deref_ecma_string (string_to_return);
+      ecma_stringbuilder_destroy (&builder);
       return ECMA_VALUE_ERROR;
     }
 
-    string_to_return = ecma_concat_ecma_strings (string_to_return, get_arg_string_p);
+    ecma_stringbuilder_append (&builder, get_arg_string_p);
 
     ecma_deref_ecma_string (get_arg_string_p);
   }
 
   /* 6 */
-  return ecma_make_string_value (string_to_return);
+  return ecma_make_string_value (ecma_stringbuilder_finalize (&builder));
 } /* ecma_builtin_string_prototype_object_concat */
 
 /**
@@ -290,7 +289,7 @@ ecma_builtin_string_prototype_object_match (ecma_value_t this_to_string_value, /
 #if ENABLED (JERRY_ES2015)
   if (!(ecma_is_value_undefined (regexp_arg) || ecma_is_value_null (regexp_arg)))
   {
-    ecma_value_t matcher = ecma_op_get_method_by_symbol_id (regexp_arg, LIT_MAGIC_STRING_MATCH);
+    ecma_value_t matcher = ecma_op_get_method_by_symbol_id (regexp_arg, LIT_GLOBAL_SYMBOL_MATCH);
 
     if (ECMA_IS_VALUE_ERROR (matcher))
     {
@@ -331,7 +330,7 @@ ecma_builtin_string_prototype_object_match (ecma_value_t this_to_string_value, /
 #if ENABLED (JERRY_ES2015)
   ecma_object_t *new_regexp_obj = ecma_get_object_from_value (new_regexp);
 
-  ecma_value_t func_value = ecma_op_object_get_by_symbol_id (new_regexp_obj, LIT_MAGIC_STRING_MATCH);
+  ecma_value_t func_value = ecma_op_object_get_by_symbol_id (new_regexp_obj, LIT_GLOBAL_SYMBOL_MATCH);
 
   if (ECMA_IS_VALUE_ERROR (func_value) || !ecma_op_is_callable (func_value))
   {
@@ -392,7 +391,7 @@ ecma_builtin_string_prototype_object_replace (ecma_value_t this_value, /**< this
   if (!(ecma_is_value_undefined (search_value) || ecma_is_value_null (search_value)))
   {
     ecma_object_t *obj_p = ecma_get_object_from_value (ecma_op_to_object (search_value));
-    ecma_value_t replace_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_MAGIC_STRING_REPLACE);
+    ecma_value_t replace_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_GLOBAL_SYMBOL_REPLACE);
     ecma_deref_object (obj_p);
 
     if (ECMA_IS_VALUE_ERROR (replace_symbol))
@@ -582,7 +581,7 @@ ecma_builtin_string_prototype_object_search (ecma_value_t this_value, /**< this 
   if (!(ecma_is_value_undefined (regexp_value) || ecma_is_value_null (regexp_value)))
   {
     ecma_object_t *obj_p = ecma_get_object_from_value (ecma_op_to_object (regexp_value));
-    ecma_value_t search_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_MAGIC_STRING_SEARCH);
+    ecma_value_t search_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_GLOBAL_SYMBOL_SEARCH);
     ecma_deref_object (obj_p);
 
     if (ECMA_IS_VALUE_ERROR (search_symbol))
@@ -638,7 +637,7 @@ ecma_builtin_string_prototype_object_search (ecma_value_t this_value, /**< this 
   ecma_deref_object (ecma_get_object_from_value (new_regexp));
 #else /* ENABLED (JERRY_ES2015) */
   ecma_object_t *regexp_obj_p = ecma_get_object_from_value (new_regexp);
-  ecma_value_t search_symbol = ecma_op_object_get_by_symbol_id (regexp_obj_p, LIT_MAGIC_STRING_SEARCH);
+  ecma_value_t search_symbol = ecma_op_object_get_by_symbol_id (regexp_obj_p, LIT_GLOBAL_SYMBOL_SEARCH);
   if (ECMA_IS_VALUE_ERROR (search_symbol))
   {
     goto cleanup_regexp;
@@ -715,7 +714,6 @@ ecma_builtin_string_prototype_object_slice (ecma_string_t *get_string_val, /**< 
   return ecma_make_string_value (new_str_p);
 } /* ecma_builtin_string_prototype_object_slice */
 
-
 /**
  * The String.prototype object's 'split' routine
  *
@@ -734,7 +732,7 @@ ecma_builtin_string_prototype_object_split (ecma_value_t this_value, /**< this a
   if (!(ecma_is_value_undefined (separator_value) || ecma_is_value_null (separator_value)))
   {
     ecma_object_t *obj_p = ecma_get_object_from_value (ecma_op_to_object (separator_value));
-    ecma_value_t split_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_MAGIC_STRING_SPLIT);
+    ecma_value_t split_symbol = ecma_op_object_get_by_symbol_id (obj_p, LIT_GLOBAL_SYMBOL_SPLIT);
     ecma_deref_object (obj_p);
 
     if (ECMA_IS_VALUE_ERROR (split_symbol))

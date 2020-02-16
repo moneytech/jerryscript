@@ -80,6 +80,7 @@ typedef enum
 #if ENABLED (JERRY_ES2015)
   PARSER_ERR_USE_STRICT_NOT_ALLOWED,                  /**< use strict directive is not allowed */
   PARSER_ERR_YIELD_NOT_ALLOWED,                       /**< yield keyword is not allowed */
+  PARSER_ERR_FOR_IN_OF_DECLARATION,                   /**< variable declaration in for-in or for-of loop */
 #endif /* ENABLED (JERRY_ES2015) */
   PARSER_ERR_DELETE_IDENT_NOT_ALLOWED,                /**< identifier delete is not allowed in strict mode */
   PARSER_ERR_EVAL_CANNOT_ASSIGNED,                    /**< eval cannot be assigned in strict mode */
@@ -130,6 +131,7 @@ typedef enum
 
   PARSER_ERR_MULTIPLE_CLASS_CONSTRUCTORS,             /**< multiple class constructor */
   PARSER_ERR_CLASS_CONSTRUCTOR_AS_ACCESSOR,           /**< class constructor cannot be an accessor */
+  PARSER_ERR_CLASS_CONSTRUCTOR_AS_GENERATOR,          /**< class constructor cannot be a generator */
   PARSER_ERR_CLASS_STATIC_PROTOTYPE,                  /**< static method name 'prototype' is not allowed */
   PARSER_ERR_UNEXPECTED_SUPER_REFERENCE,              /**< unexpected super keyword */
 
@@ -143,6 +145,8 @@ typedef enum
   PARSER_ERR_DUPLICATED_ARGUMENT_NAMES,               /**< duplicated argument names */
   PARSER_ERR_INVALID_DESTRUCTURING_PATTERN,           /**< invalid destructuring pattern */
   PARSER_ERR_ILLEGAL_PROPERTY_IN_DECLARATION,         /**< illegal property in declaration context */
+  PARSER_ERR_NEW_TARGET_EXPECTED,                     /**< expected new.target expression */
+  PARSER_ERR_NEW_TARGET_NOT_ALLOWED,                  /**< new.target is not allowed in the given context */
 #endif /* ENABLED (JERRY_ES2015) */
 #if ENABLED (JERRY_ES2015_MODULE_SYSTEM)
   PARSER_ERR_FILE_NOT_FOUND,                          /**< file not found*/

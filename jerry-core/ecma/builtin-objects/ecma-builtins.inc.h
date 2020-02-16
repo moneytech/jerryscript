@@ -362,7 +362,6 @@ BUILTIN_ROUTINE (ECMA_BUILTIN_ID_FLOAT64ARRAY,
                  float64array)
 #endif /* ENABLED (JERRY_NUMBER_TYPE_FLOAT64) */
 
-
 BUILTIN (ECMA_BUILTIN_ID_INT8ARRAY_PROTOTYPE,
          ECMA_OBJECT_TYPE_GENERAL,
          ECMA_BUILTIN_ID_TYPEDARRAY_PROTOTYPE,
@@ -510,6 +509,13 @@ BUILTIN_ROUTINE (ECMA_BUILTIN_ID_WEAKSET,
 
 #if ENABLED (JERRY_ES2015)
 
+/* Intrinsic hidden builtin object  */
+BUILTIN (ECMA_BUILTIN_ID_INTRINSIC_OBJECT,
+         ECMA_OBJECT_TYPE_GENERAL,
+         ECMA_BUILTIN_ID__COUNT,
+         true,
+         intrinsic)
+
 /* The Array.prototype[@@unscopables] object */
 BUILTIN (ECMA_BUILTIN_ID_ARRAY_PROTOTYPE_UNSCOPABLES,
          ECMA_OBJECT_TYPE_GENERAL,
@@ -552,6 +558,21 @@ BUILTIN (ECMA_BUILTIN_ID_STRING_ITERATOR_PROTOTYPE,
          true,
          string_iterator_prototype)
 
+/* The %(GeneratorFunction)% object */
+BUILTIN_ROUTINE (ECMA_BUILTIN_ID_GENERATOR_FUNCTION,
+                 ECMA_OBJECT_TYPE_FUNCTION,
+                 ECMA_BUILTIN_ID_FUNCTION,
+                 true,
+                 generator_function)
+
+/* The %(Generator)% object */
+BUILTIN (ECMA_BUILTIN_ID_GENERATOR,
+         ECMA_OBJECT_TYPE_GENERAL,
+         ECMA_BUILTIN_ID_FUNCTION_PROTOTYPE,
+         true,
+         generator)
+
+/* The %(Generator).prototype% object */
 BUILTIN (ECMA_BUILTIN_ID_GENERATOR_PROTOTYPE,
          ECMA_OBJECT_TYPE_GENERAL,
          ECMA_BUILTIN_ID_ITERATOR_PROTOTYPE,

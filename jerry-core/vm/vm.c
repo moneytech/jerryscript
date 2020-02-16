@@ -414,18 +414,21 @@ vm_construct_literal_object (vm_frame_ctx_t *frame_ctx_p, /**< frame context */
   ecma_object_t *func_obj_p;
 
 #if ENABLED (JERRY_ES2015)
-  if (!(bytecode_p->status_flags & CBC_CODE_FLAGS_ARROW_FUNCTION))
-  {
-#endif /* ENABLED (JERRY_ES2015) */
-    func_obj_p = ecma_op_create_function_object (frame_ctx_p->lex_env_p,
-                                                 bytecode_p);
-#if ENABLED (JERRY_ES2015)
-  }
-  else
+  if (bytecode_p->status_flags & CBC_CODE_FLAGS_ARROW_FUNCTION)
   {
     func_obj_p = ecma_op_create_arrow_function_object (frame_ctx_p->lex_env_p,
                                                        bytecode_p,
                                                        frame_ctx_p->this_binding);
+  }
+  else if (bytecode_p->status_flags & CBC_CODE_FLAGS_GENERATOR)
+  {
+    func_obj_p = ecma_op_create_generator_function_object (frame_ctx_p->lex_env_p, bytecode_p);
+  }
+  else
+  {
+#endif /* ENABLED (JERRY_ES2015) */
+    func_obj_p = ecma_op_create_simple_function_object (frame_ctx_p->lex_env_p, bytecode_p);
+#if ENABLED (JERRY_ES2015)
   }
 #endif /* ENABLED (JERRY_ES2015) */
 
@@ -1948,8 +1951,9 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
         }
         case VM_OC_ITERATOR_STEP:
         {
-          const int8_t index = (opcode == CBC_EXT_ITERATOR_STEP) ? -1 : -3;
-          result = ecma_op_iterator_step (stack_top_p[index]);
+          JERRY_ASSERT (opcode >= CBC_EXT_ITERATOR_STEP && opcode <= CBC_EXT_ITERATOR_STEP_3);
+          const uint8_t index = (uint8_t) (1 + (opcode - CBC_EXT_ITERATOR_STEP));
+          result = ecma_op_iterator_step (stack_top_p[-index]);
 
           if (ECMA_IS_VALUE_ERROR (result))
           {
@@ -1999,9 +2003,10 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
         }
         case VM_OC_REST_INITIALIZER:
         {
-          const int8_t iterator_index = (opcode == CBC_EXT_REST_INITIALIZER) ? -1 : -3;
+          JERRY_ASSERT (opcode >= CBC_EXT_REST_INITIALIZER && opcode <= CBC_EXT_REST_INITIALIZER_3);
+          const uint8_t iterator_index = (uint8_t) (1 + (opcode - CBC_EXT_REST_INITIALIZER));
           ecma_object_t *array_p = ecma_op_new_fast_array_object (0);
-          ecma_value_t iterator = stack_top_p[iterator_index];
+          ecma_value_t iterator = stack_top_p[-iterator_index];
           uint32_t index = 0;
 
           while (true)
@@ -2075,7 +2080,14 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
           frame_ctx_p->call_operation = VM_EXEC_RETURN;
           frame_ctx_p->byte_code_p = byte_code_p;
           frame_ctx_p->stack_top_p = stack_top_p;
-          return opfunc_create_executable_object (frame_ctx_p);
+          result = opfunc_create_executable_object (frame_ctx_p);
+
+          if (ECMA_IS_VALUE_ERROR (result))
+          {
+            goto error;
+          }
+
+          return result;
         }
         case VM_OC_YIELD:
         {
@@ -2135,6 +2147,21 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
           JERRY_ASSERT (tagged_idx < collection_p->item_count);
 
           *stack_top_p++ = ecma_copy_value (collection_p->buffer_p[tagged_idx]);
+          continue;
+        }
+        case VM_OC_PUSH_NEW_TARGET:
+        {
+          ecma_object_t *new_target_object = JERRY_CONTEXT (current_new_target);
+          if (new_target_object == NULL)
+          {
+            *stack_top_p++ = ECMA_VALUE_UNDEFINED;
+          }
+          else
+          {
+            JERRY_ASSERT (new_target_object != JERRY_CONTEXT_INVALID_NEW_TARGET);
+            ecma_ref_object (new_target_object);
+            *stack_top_p++ = ecma_make_object_value (new_target_object);
+          }
           continue;
         }
 #endif /* ENABLED (JERRY_ES2015) */
@@ -3485,7 +3512,7 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
 
           VM_PLUS_EQUAL_U16 (frame_ctx_p->context_depth, PARSER_FOR_OF_CONTEXT_STACK_ALLOCATION);
           stack_top_p += PARSER_FOR_OF_CONTEXT_STACK_ALLOCATION;
-          stack_top_p[-1] = VM_CREATE_CONTEXT (VM_CONTEXT_FOR_OF, branch_offset);
+          stack_top_p[-1] = VM_CREATE_CONTEXT (VM_CONTEXT_FOR_OF, branch_offset) | VM_CONTEXT_CLOSE_ITERATOR;
           stack_top_p[-2] = next_value;
           stack_top_p[-3] = iterator;
 
@@ -3587,6 +3614,7 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
         case VM_OC_CONTEXT_END:
         {
           JERRY_ASSERT (VM_GET_REGISTERS (frame_ctx_p) + register_end + frame_ctx_p->context_depth == stack_top_p);
+          JERRY_ASSERT (!(stack_top_p[-1] & VM_CONTEXT_CLOSE_ITERATOR));
 
           ecma_value_t context_type = VM_GET_CONTEXT_TYPE (stack_top_p[-1]);
 
@@ -3653,6 +3681,7 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
         case VM_OC_JUMP_AND_EXIT_CONTEXT:
         {
           JERRY_ASSERT (VM_GET_REGISTERS (frame_ctx_p) + register_end + frame_ctx_p->context_depth == stack_top_p);
+          JERRY_ASSERT (!jcontext_has_pending_exception ());
 
           branch_offset += (int32_t) (byte_code_start_p - frame_ctx_p->byte_code_start_p);
 
@@ -3669,6 +3698,14 @@ vm_loop (vm_frame_ctx_t *frame_ctx_p) /**< frame context */
           {
             byte_code_p = frame_ctx_p->byte_code_start_p + branch_offset;
           }
+
+#if ENABLED (JERRY_ES2015)
+          if (jcontext_has_pending_exception ())
+          {
+            result = ECMA_VALUE_ERROR;
+            goto error;
+          }
+#endif /* ENABLED (JERRY_ES2015) */
 
           JERRY_ASSERT (VM_GET_REGISTERS (frame_ctx_p) + register_end + frame_ctx_p->context_depth == stack_top_p);
           continue;
@@ -3944,10 +3981,27 @@ error:
         JERRY_ASSERT (VM_GET_CONTEXT_TYPE (stack_top_p[-1]) == VM_CONTEXT_FINALLY_RETURN);
         JERRY_ASSERT (VM_GET_REGISTERS (frame_ctx_p) + register_end + frame_ctx_p->context_depth == stack_top_p);
 
+#if ENABLED (JERRY_ES2015)
+        if (jcontext_has_pending_exception ())
+        {
+          stack_top_p[-1] = (ecma_value_t) (stack_top_p[-1] - VM_CONTEXT_FINALLY_RETURN + VM_CONTEXT_FINALLY_THROW);
+          ecma_free_value (result);
+          result = jcontext_take_exception ();
+        }
+#endif /* ENABLED (JERRY_ES2015) */
+
         byte_code_p = frame_ctx_p->byte_code_p;
         stack_top_p[-2] = result;
         continue;
       }
+
+#if ENABLED (JERRY_ES2015)
+      if (jcontext_has_pending_exception ())
+      {
+        ecma_free_value (result);
+        result = ECMA_VALUE_ERROR;
+      }
+#endif /* ENABLED (JERRY_ES2015) */
     }
     else if (jcontext_has_pending_exception () && !jcontext_has_pending_abort ())
     {

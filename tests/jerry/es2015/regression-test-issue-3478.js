@@ -12,5 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-Object.defineProperty(Array.prototype, 0, { get : function () { throw $; } });
-Promise.race([ , this]).then(Error);
+Object.prototype["symbol"] = 0;
+try {
+  Promise.race([]);
+  assert(false);
+} catch(e) {
+  assert(e instanceof TypeError);
+}

@@ -571,9 +571,14 @@ opfunc_create_executable_object (vm_frame_ctx_t *frame_ctx_p) /**< frame context
 
   size_t total_size = JERRY_ALIGNUP (sizeof (vm_executable_object_t) + size, sizeof (uintptr_t));
 
-  ecma_object_t *object_p = ecma_create_object (ecma_builtin_get (ECMA_BUILTIN_ID_GENERATOR_PROTOTYPE),
+  ecma_object_t *proto_p = ecma_op_get_prototype_from_constructor (JERRY_CONTEXT (current_function_obj_p),
+                                                                   ECMA_BUILTIN_ID_GENERATOR_PROTOTYPE);
+
+  ecma_object_t *object_p = ecma_create_object (proto_p,
                                                 total_size,
                                                 ECMA_OBJECT_TYPE_CLASS);
+
+  ecma_deref_object (proto_p);
 
   vm_executable_object_t *executable_object_p = (vm_executable_object_t *) object_p;
 
@@ -665,8 +670,13 @@ opfunc_resume_executable_object (vm_executable_object_t *executable_object_p, /*
   executable_object_p->frame_ctx.prev_context_p = JERRY_CONTEXT (vm_top_context_p);
   JERRY_CONTEXT (vm_top_context_p) = &executable_object_p->frame_ctx;
 
+  /* inside the generators the "new.target" is always "undefined" as it can't be invoked with "new" */
+  ecma_object_t *old_new_target = JERRY_CONTEXT (current_new_target);
+  JERRY_CONTEXT (current_new_target) = NULL;
+
   ecma_value_t result = vm_execute (&executable_object_p->frame_ctx);
 
+  JERRY_CONTEXT (current_new_target) = old_new_target;
   executable_object_p->extended_object.u.class_prop.extra_info &= (uint16_t) ~ECMA_EXECUTABLE_OBJECT_RUNNING;
 
   if (executable_object_p->frame_ctx.call_operation != VM_EXEC_RETURN)

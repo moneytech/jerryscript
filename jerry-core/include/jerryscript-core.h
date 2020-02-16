@@ -39,7 +39,7 @@ extern "C"
 /**
  * Minor version of JerryScript API.
  */
-#define JERRY_API_MINOR_VERSION 1
+#define JERRY_API_MINOR_VERSION 2
 
 /**
  * Patch version of JerryScript API.
@@ -606,6 +606,7 @@ jerry_context_t *jerry_create_context (uint32_t heap_size, jerry_context_alloc_t
 void jerry_set_vm_exec_stop_callback (jerry_vm_exec_stop_callback_t stop_cb, void *user_p, uint32_t frequency);
 jerry_value_t jerry_get_backtrace (uint32_t max_depth);
 jerry_value_t jerry_get_resource_name (const jerry_value_t value);
+jerry_value_t jerry_get_new_target (void);
 
 /**
  * Array buffer components.
@@ -664,7 +665,6 @@ typedef enum
   JERRY_TYPEDARRAY_FLOAT32,
   JERRY_TYPEDARRAY_FLOAT64,
 } jerry_typedarray_type_t;
-
 
 bool jerry_value_is_typedarray (jerry_value_t value);
 jerry_value_t jerry_create_typedarray (jerry_typedarray_type_t type_name, jerry_length_t length);

@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-var desc = Object.getOwnPropertyDescriptor(Function, "length");
-assert(desc.value === 1 &&
-        desc.writable === false &&
-        desc.enumerable === false &&
-        desc.configurable === false);
+var a = new Float32Array([$])
+
+try {
+  var $ = a.map(function () { $() });
+  assert(false);
+} catch (e) {
+  assert(e instanceof TypeError);
+}

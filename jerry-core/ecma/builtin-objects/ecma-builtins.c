@@ -793,7 +793,7 @@ ecma_builtin_try_to_instantiate_property (ecma_object_t *object_p, /**< object *
 #if ENABLED (JERRY_ES2015)
     case ECMA_BUILTIN_PROPERTY_SYMBOL:
     {
-      lit_magic_string_id_t symbol_desc_id = (lit_magic_string_id_t) curr_property_p->magic_string_id;
+      lit_magic_string_id_t symbol_desc_id = (lit_magic_string_id_t) curr_property_p->value;
 
       ecma_string_t *symbol_desc_p;
       symbol_desc_p = ecma_append_magic_string_to_string (ecma_get_magic_string (LIT_MAGIC_STRING_SYMBOL_DOT_UL),
@@ -802,10 +802,27 @@ ecma_builtin_try_to_instantiate_property (ecma_object_t *object_p, /**< object *
       ecma_value_t symbol_desc_value = ecma_make_string_value (symbol_desc_p);
 
       ecma_string_t *symbol_p = ecma_new_symbol_from_descriptor_string (symbol_desc_value);
-      lit_magic_string_id_t symbol_id = (lit_magic_string_id_t) curr_property_p->value;
+      lit_magic_string_id_t symbol_id = (lit_magic_string_id_t) curr_property_p->magic_string_id;
       symbol_p->u.hash = (uint16_t) ((symbol_id << ECMA_GLOBAL_SYMBOL_SHIFT) | ECMA_GLOBAL_SYMBOL_FLAG);
 
       value = ecma_make_symbol_value (symbol_p);
+      break;
+    }
+    case ECMA_BUILTIN_PROPERTY_INTRINSIC_PROPERTY:
+    {
+      value = ecma_op_object_get_by_magic_id (ecma_builtin_get (ECMA_BUILTIN_ID_INTRINSIC_OBJECT),
+                                              (lit_magic_string_id_t) curr_property_p->value);
+      break;
+    }
+    case ECMA_BUILTIN_PROPERTY_ACCESSOR_BUILTIN_FUNCTION:
+    {
+      is_accessor = true;
+      uint16_t getter_id = ECMA_ACCESSOR_READ_WRITE_GET_GETTER_ID (curr_property_p->value);
+      uint16_t setter_id = ECMA_ACCESSOR_READ_WRITE_GET_SETTER_ID (curr_property_p->value);
+      getter_p = ecma_builtin_get (getter_id);
+      setter_p = ecma_builtin_get (setter_id);
+      ecma_ref_object (getter_p);
+      ecma_ref_object (setter_p);
       break;
     }
 #endif /* ENABLED (JERRY_ES2015) */
@@ -891,17 +908,16 @@ ecma_builtin_try_to_instantiate_property (ecma_object_t *object_p, /**< object *
  */
 void
 ecma_builtin_list_lazy_property_names (ecma_object_t *object_p, /**< a built-in object */
-                                       bool separate_enumerable, /**< true -  list enumerable properties into
-                                                                  *           main collection, and non-enumerable
-                                                                  *           to collection of 'skipped non-enumerable'
-                                                                  *           properties,
-                                                                  *   false - list all properties into main collection.
-                                                                  */
+                                       uint32_t opts, /**< listing options using flags
+                                                       *   from ecma_list_properties_options_t */
                                        ecma_collection_t *main_collection_p, /**< 'main' collection */
                                        ecma_collection_t *non_enum_collection_p) /**< skipped 'non-enumerable'
                                                                                   *   collection */
 {
   JERRY_ASSERT (ecma_get_object_is_builtin (object_p));
+
+  const bool separate_enumerable = (opts & ECMA_LIST_ENUMERABLE) != 0;
+  const bool is_array_indices_only = (opts & ECMA_LIST_ARRAY_INDICES) != 0;
 
   if (ecma_get_object_type (object_p) == ECMA_OBJECT_TYPE_FUNCTION
       && ecma_builtin_function_is_routine (object_p))
@@ -959,6 +975,12 @@ ecma_builtin_list_lazy_property_names (ecma_object_t *object_p, /**< a built-in 
 #endif /* ENABLED (JERRY_ES2015) */
 
       ecma_string_t *name_p = ecma_get_magic_string ((lit_magic_string_id_t) curr_property_p->magic_string_id);
+
+      if (is_array_indices_only && ecma_string_get_array_index (name_p) == ECMA_STRING_NOT_ARRAY_INDEX)
+      {
+        curr_property_p++;
+        continue;
+      }
 
       uint32_t bit_for_index = (uint32_t) 1u << index;
 

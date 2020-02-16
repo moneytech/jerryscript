@@ -24,7 +24,6 @@
 #include "ecma-gc.h"
 #include "ecma-globals.h"
 #include "ecma-helpers.h"
-#include "ecma-iterator-object.h"
 #include "ecma-objects.h"
 #include "ecma-string-object.h"
 #include "lit-char-helpers.h"
@@ -73,7 +72,6 @@ enum
   ECMA_ARRAY_PROTOTYPE_FIND,
   ECMA_ARRAY_PROTOTYPE_FIND_INDEX,
   ECMA_ARRAY_PROTOTYPE_ENTRIES,
-  ECMA_ARRAY_PROTOTYPE_VALUES,
   ECMA_ARRAY_PROTOTYPE_KEYS,
   ECMA_ARRAY_PROTOTYPE_SYMBOL_ITERATOR,
   ECMA_ARRAY_PROTOTYPE_FILL,
@@ -430,6 +428,7 @@ ecma_builtin_array_prototype_object_pop (ecma_object_t *obj_p, /**< array object
   {
     if (!ecma_get_object_extensible (obj_p))
     {
+      ecma_free_value (get_value);
       return ecma_raise_type_error (ECMA_ERR_MSG ("Invalid argument type."));
     }
 
@@ -827,13 +826,16 @@ ecma_builtin_array_prototype_object_slice (ecma_value_t arg1, /**< start */
 
   JERRY_ASSERT (start <= len && end <= len);
 
+  bool use_fast_path = ecma_op_object_is_fast_array (obj_p);
+  uint32_t copied_length = (end > start) ? end - start : 0;
 #if ENABLED (JERRY_ES2015)
-  ecma_value_t new_array = ecma_op_array_species_create (obj_p, 0);
+  ecma_value_t new_array = ecma_op_array_species_create (obj_p, copied_length);
 
   if (ECMA_IS_VALUE_ERROR (new_array))
   {
     return new_array;
   }
+  use_fast_path &= ecma_op_object_is_fast_array (ecma_get_object_from_value (new_array));
 #else /* !ENABLED (JERRY_ES2015) */
   ecma_value_t new_array = ecma_op_create_array_object (NULL, 0, false);
   JERRY_ASSERT (!ECMA_IS_VALUE_ERROR (new_array));
@@ -844,25 +846,45 @@ ecma_builtin_array_prototype_object_slice (ecma_value_t arg1, /**< start */
   /* 9. */
   uint32_t n = 0;
 
-  if (ecma_op_object_is_fast_array (obj_p))
+  if (use_fast_path && copied_length > 0)
   {
     ecma_extended_object_t *ext_from_obj_p = (ecma_extended_object_t *) obj_p;
 
-    if (ext_from_obj_p->u.array.u.hole_count < ECMA_FAST_ARRAY_HOLE_ONE
-        && len != 0
-        && start < end)
+    if (ext_from_obj_p->u.array.u.hole_count < ECMA_FAST_ARRAY_HOLE_ONE)
     {
-      uint32_t length = end - start;
       ecma_extended_object_t *ext_to_obj_p = (ecma_extended_object_t *) new_array_p;
-      ecma_value_t *to_buffer_p = ecma_fast_array_extend (new_array_p, length);
+
+#if ENABLED (JERRY_ES2015)
+      uint32_t target_length = ext_to_obj_p->u.array.length;
+      ecma_value_t *to_buffer_p;
+      if (copied_length == target_length)
+      {
+        to_buffer_p = ECMA_GET_NON_NULL_POINTER (ecma_value_t, new_array_p->u1.property_list_cp);
+      }
+      else if (copied_length > target_length)
+      {
+        to_buffer_p = ecma_fast_array_extend (new_array_p, copied_length);
+      }
+      else
+      {
+        ecma_delete_fast_array_properties (new_array_p, copied_length);
+        to_buffer_p = ECMA_GET_NON_NULL_POINTER (ecma_value_t, new_array_p->u1.property_list_cp);
+      }
+#else /* !ENABLED (JERRY_ES2015) */
+      ecma_value_t *to_buffer_p = ecma_fast_array_extend (new_array_p, copied_length);
+#endif /* ENABLED (JERRY_ES2015) */
+
       ecma_value_t *from_buffer_p = ECMA_GET_NON_NULL_POINTER (ecma_value_t, obj_p->u1.property_list_cp);
 
       for (uint32_t k = start; k < end; k++, n++)
       {
+#if ENABLED (JERRY_ES2015)
+        ecma_free_value_if_not_object (to_buffer_p[n]);
+#endif /* ENABLED (JERRY_ES2015) */
         to_buffer_p[n] = ecma_copy_value_if_not_object (from_buffer_p[k]);
       }
 
-      ext_to_obj_p->u.array.u.hole_count -= length * ECMA_FAST_ARRAY_HOLE_ONE;
+      ext_to_obj_p->u.array.u.hole_count &= ECMA_FAST_ARRAY_HOLE_ONE - 1;
 
       return new_array;
     }
@@ -1269,7 +1291,6 @@ ecma_builtin_array_prototype_object_splice (const ecma_value_t args[], /**< argu
       ecma_deref_object (new_array_p);
       return get_value;
     }
-
 
     if (ecma_is_value_found (get_value))
     {
@@ -1922,7 +1943,6 @@ ecma_builtin_array_prototype_object_map (ecma_value_t arg1, /**< callbackfn */
                                                                      mapped_value,
                                                                      ECMA_PROPERTY_CONFIGURABLE_ENUMERABLE_WRITABLE);
 
-
       ecma_free_value (mapped_value);
       ecma_free_value (current_value);
 #if ENABLED (JERRY_ES2015)
@@ -2067,9 +2087,9 @@ ecma_builtin_array_reduce_from (ecma_value_t callbackfn, /**< routine's 1st argu
   }
 
   /* 5. */
-  if (len == 0 && ecma_is_value_undefined (initial_value))
+  if (len == 0 && args_number == 1)
   {
-    return ecma_raise_type_error (ECMA_ERR_MSG ("Initial value cannot be undefined."));
+    return ecma_raise_type_error (ECMA_ERR_MSG ("Reduce of empty array with no initial value."));
   }
 
   JERRY_ASSERT (ecma_is_value_object (callbackfn));
@@ -2470,36 +2490,6 @@ ecma_builtin_array_prototype_object_copy_within (const ecma_value_t args[], /**<
 
   return ecma_copy_value (ecma_make_object_value (obj_p));
 } /* ecma_builtin_array_prototype_object_copy_within */
-
-/**
- * Helper function for Array.prototype object's {'keys', 'values', 'entries', '@@iterator'}
- * routines common parts.
- *
- * See also:
- *          ECMA-262 v6, 22.1.3.4
- *          ECMA-262 v6, 22.1.3.13
- *          ECMA-262 v6, 22.1.3.29
- *          ECMA-262 v6, 22.1.3.30
- *
- * Note:
- *      Returned value must be freed with ecma_free_value.
- *
- * @return iterator result object, if success
- *         error - otherwise
- */
-static ecma_value_t
-ecma_builtin_array_iterators_helper (ecma_object_t *obj_p, /**< array object */
-                                     uint8_t type) /**< any combination of
-                                                    *   ecma_iterator_type_t bits */
-{
-  ecma_object_t *prototype_obj_p = ecma_builtin_get (ECMA_BUILTIN_ID_ARRAY_ITERATOR_PROTOTYPE);
-
-  return ecma_op_create_iterator_object (ecma_make_object_value (obj_p),
-                                         prototype_obj_p,
-                                         ECMA_PSEUDO_ARRAY_ITERATOR,
-                                         type);
-} /* ecma_builtin_array_iterators_helper */
-
 #endif /* ENABLED (JERRY_ES2015) */
 
 /**
@@ -2547,24 +2537,18 @@ ecma_builtin_array_prototype_dispatch_routine (uint16_t builtin_routine_id, /**<
 
 #if ENABLED (JERRY_ES2015)
   if (JERRY_UNLIKELY (builtin_routine_id >= ECMA_ARRAY_PROTOTYPE_ENTRIES
-                      && builtin_routine_id <= ECMA_ARRAY_PROTOTYPE_SYMBOL_ITERATOR))
+                      && builtin_routine_id <= ECMA_ARRAY_PROTOTYPE_KEYS))
   {
     ecma_value_t ret_value;
 
     if (builtin_routine_id == ECMA_ARRAY_PROTOTYPE_ENTRIES)
     {
-      ret_value = ecma_builtin_array_iterators_helper (obj_p, ECMA_ITERATOR_KEYS_VALUES);
-    }
-    else if (builtin_routine_id == ECMA_ARRAY_PROTOTYPE_KEYS)
-    {
-      ret_value = ecma_builtin_array_iterators_helper (obj_p, ECMA_ITERATOR_KEYS);
+      ret_value = ecma_op_create_array_iterator (obj_p, ECMA_ITERATOR_KEYS_VALUES);
     }
     else
     {
-      JERRY_ASSERT (builtin_routine_id == ECMA_ARRAY_PROTOTYPE_VALUES
-                    || builtin_routine_id == ECMA_ARRAY_PROTOTYPE_SYMBOL_ITERATOR);
-
-      ret_value = ecma_builtin_array_iterators_helper (obj_p, ECMA_ITERATOR_VALUES);
+      JERRY_ASSERT (builtin_routine_id == ECMA_ARRAY_PROTOTYPE_KEYS);
+      ret_value = ecma_op_create_array_iterator (obj_p, ECMA_ITERATOR_KEYS);
     }
 
     ecma_deref_object (obj_p);

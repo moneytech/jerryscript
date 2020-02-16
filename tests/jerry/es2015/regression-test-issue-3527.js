@@ -12,4 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-[...RegExp.prototype.compile] = ([]);
+function assertThrows(src) {
+  try {
+    eval(src);
+    assert(false);
+  } catch (e) {
+    assert(e instanceof SyntaxError);
+  }
+}
+
+assertThrows(`function $({
+  $: {
+      [$.$]
+  }
+}) {}`);
+
+assertThrows(`function $({
+  $: {
+      [$]
+  }
+}) {}`);

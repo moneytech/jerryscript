@@ -107,6 +107,8 @@ typedef enum
   ECMA_PARSE_HAS_STATIC_SUPER = (1u << 5), /**< the current context is a static class method */
   ECMA_PARSE_EVAL = (1u << 6), /**< eval is called */
   ECMA_PARSE_MODULE = (1u << 7), /**< module is parsed */
+  ECMA_PARSE_FUNCTION = (1u << 8), /**< a function body is parsed or the code is inside a function */
+  ECMA_PARSE_GENERATOR_FUNCTION = (1u << 9), /**< generator function is parsed */
 } ecma_parse_opts_t;
 
 /**
@@ -333,9 +335,10 @@ typedef enum
   ECMA_LIST_ENUMERABLE = (1 << 1), /**< exclude non-enumerable properties */
   ECMA_LIST_PROTOTYPE = (1 << 2), /**< list properties from prototype chain */
 #if ENABLED (JERRY_ES2015)
-  ECMA_LIST_SYMBOLS = (1 << 3), /**< list symbol properties only */
+  ECMA_LIST_SYMBOLS = (1 << 3), /**< list symbol properties */
+  ECMA_LIST_SYMBOLS_ONLY = (1 << 4), /**< list symbol properties only */
 #endif /* ENABLED (JERRY_ES2015) */
-  ECMA_LIST_CONVERT_FAST_ARRAYS = (1 << 4), /**< after listing the properties convert
+  ECMA_LIST_CONVERT_FAST_ARRAYS = (1 << 5), /**< after listing the properties convert
                                              *   the fast access mode array back to normal array */
 } ecma_list_properties_options_t;
 
@@ -394,6 +397,15 @@ typedef enum
  * No attributes can be changed for this property.
  */
 #define ECMA_PROPERTY_FIXED 0
+
+/**
+ * Default flag of length property.
+ */
+#if ENABLED (JERRY_ES2015)
+#define ECMA_PROPERTY_FLAG_DEFAULT_LENGTH ECMA_PROPERTY_FLAG_CONFIGURABLE
+#else /* !ENABLED (JERRY_ES2015) */
+#define ECMA_PROPERTY_FLAG_DEFAULT_LENGTH ECMA_PROPERTY_FIXED
+#endif /* ENABLED (JERRY_ES2015) */
 
 /**
  * Shift for property name part.
@@ -664,7 +676,7 @@ typedef enum
   ECMA_ITERATOR_KEYS, /**< List only key indices */
   ECMA_ITERATOR_VALUES, /**< List only key values */
   ECMA_ITERATOR_KEYS_VALUES, /**< List key indices and values */
-} ecma_iterator_type_t;
+} ecma_array_iterator_type_t;
 
 #endif /* ENABLED (JERRY_ES2015) */
 

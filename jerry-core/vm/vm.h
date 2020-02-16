@@ -1,4 +1,3 @@
-
 /* Copyright JS Foundation and other contributors, http://js.foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -261,6 +260,7 @@ typedef enum
   VM_OC_RETURN_PROMISE,          /**< return from an async function */
   VM_OC_STRING_CONCAT,           /**< string concatenation */
   VM_OC_GET_TEMPLATE_OBJECT,     /**< GetTemplateObject operation */
+  VM_OC_PUSH_NEW_TARGET,         /**< push new.target onto the stack */
 #endif /* ENABLED (JERRY_ES2015) */
   VM_OC_NONE,                    /**< a special opcode for unsupported byte codes */
 } vm_oc_types;
@@ -317,6 +317,7 @@ typedef enum
   VM_OC_RETURN_PROMISE = VM_OC_NONE,          /**< return from an async function */
   VM_OC_STRING_CONCAT = VM_OC_NONE,           /**< string concatenation */
   VM_OC_GET_TEMPLATE_OBJECT = VM_OC_NONE,     /**< GetTemplateObject operation */
+  VM_OC_PUSH_NEW_TARGET = VM_OC_NONE,         /**< push new.target onto the stack */
 #endif /* !ENABLED (JERRY_ES2015) */
 
   VM_OC_UNUSED = VM_OC_NONE                   /**< placeholder if the list is empty */

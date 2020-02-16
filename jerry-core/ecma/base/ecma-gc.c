@@ -700,10 +700,6 @@ ecma_gc_free_native_pointer (ecma_property_t *property_p) /**< property */
   native_pointer_p = ECMA_GET_INTERNAL_VALUE_POINTER (ecma_native_pointer_t,
                                                       value_p->value);
 
-#ifndef JERRY_NDEBUG
-  JERRY_CONTEXT (status_flags) &= (uint32_t) ~ECMA_STATUS_API_AVAILABLE;
-#endif /* !JERRY_NDEBUG */
-
   while (native_pointer_p != NULL)
   {
     if (native_pointer_p->info_p != NULL)
@@ -722,10 +718,6 @@ ecma_gc_free_native_pointer (ecma_property_t *property_p) /**< property */
 
     native_pointer_p = next_p;
   }
-
-#ifndef JERRY_NDEBUG
-  JERRY_CONTEXT (status_flags) |= ECMA_STATUS_API_AVAILABLE;
-#endif /* !JERRY_NDEBUG */
 } /* ecma_gc_free_native_pointer */
 
 /**
@@ -815,7 +807,7 @@ ecma_gc_free_executable_object (ecma_object_t *object_p) /**< object */
 
     do
     {
-      context_top_p[-1] &= (uint32_t) ~VM_CONTEXT_HAS_LEX_ENV;
+      context_top_p[-1] &= (uint32_t) ~(VM_CONTEXT_HAS_LEX_ENV | VM_CONTEXT_CLOSE_ITERATOR);
 
       uint32_t offsets = vm_get_context_value_offsets (context_top_p);
 
@@ -1150,7 +1142,8 @@ ecma_gc_free_object (ecma_object_t *object_p) /**< object to free */
           JERRY_ASSERT (ext_object_p->u.class_prop.class_id == LIT_MAGIC_STRING_UNDEFINED
                         || ext_object_p->u.class_prop.class_id == LIT_MAGIC_STRING_ARGUMENTS_UL
                         || ext_object_p->u.class_prop.class_id == LIT_MAGIC_STRING_BOOLEAN_UL
-                        || ext_object_p->u.class_prop.class_id == LIT_MAGIC_STRING_ERROR_UL);
+                        || ext_object_p->u.class_prop.class_id == LIT_MAGIC_STRING_ERROR_UL
+                        || ext_object_p->u.class_prop.class_id == LIT_INTERNAL_MAGIC_STRING_INTERNAL_OBJECT);
           break;
         }
       }
@@ -1405,6 +1398,7 @@ ecma_gc_run (void)
   while (marked_anything_during_current_iteration);
 
   black_end_p->gc_next_cp = JMEM_CP_NULL;
+  JERRY_CONTEXT (ecma_gc_objects_cp) = black_list_head.gc_next_cp;
 
   /* Sweep objects that are currently unmarked. */
   obj_iter_cp = white_gray_list_head.gc_next_cp;
@@ -1419,8 +1413,6 @@ ecma_gc_run (void)
     ecma_gc_free_object (obj_iter_p);
     obj_iter_cp = obj_next_cp;
   }
-
-  JERRY_CONTEXT (ecma_gc_objects_cp) = black_list_head.gc_next_cp;
 
 #if ENABLED (JERRY_BUILTIN_REGEXP)
   /* Free RegExp bytecodes stored in cache */

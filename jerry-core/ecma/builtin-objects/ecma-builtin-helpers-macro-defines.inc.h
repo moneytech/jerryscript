@@ -27,8 +27,16 @@
 
 #if ENABLED (JERRY_ES2015)
 #ifndef SYMBOL_VALUE
-#define SYMBOL_VALUE(name, desc_string_id)
+#define SYMBOL_VALUE(symbol, desc_magic_string_id)
 #endif /* !SYMBOL_VALUE */
+
+#ifndef INTRINSIC_PROPERTY
+#define INTRINSIC_PROPERTY(name, magic_string_id)
+#endif /* !INTRINSIC_PROPERTY */
+
+#ifndef ACCESSOR_BUILTIN_FUNCTION_OBJECT
+#define ACCESSOR_BUILTIN_FUNCTION_OBJECT(name, getter_builtin_id, setter_builtin_id, prop_attributes)
+#endif /* !ACCESSOR_BUILTIN_FUNCTION_OBJECT */
 #endif /* ENABLED (JERRY_ES2015) */
 
 #ifndef OBJECT_VALUE

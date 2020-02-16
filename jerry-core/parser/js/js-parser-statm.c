@@ -698,7 +698,7 @@ parser_parse_function_statement (parser_context_t *context_p) /**< context */
 #endif /* ENABLED (JERRY_DEBUGGER) */
 
   JERRY_ASSERT (context_p->scope_stack_top >= 2);
-  parser_scope_stack *scope_stack_p = context_p->scope_stack_p + context_p->scope_stack_top - 2;
+  parser_scope_stack_t *scope_stack_p = context_p->scope_stack_p + context_p->scope_stack_top - 2;
 
   uint16_t literal_index = context_p->lit_object.index;
 
@@ -1189,12 +1189,12 @@ parser_parse_for_statement_start (parser_context_t *context_p) /**< context */
       else
       {
         token_type = LEXER_KEYW_LET;
-        has_context = true;
+        has_context = (context_p->next_scanner_info_p->source_p == context_p->source_p);
         scanner_get_location (&start_location, context_p);
       }
     }
 
-    if (has_context && (context_p->next_scanner_info_p->source_p == context_p->source_p))
+    if (has_context)
     {
       has_context = parser_push_block_context (context_p, true);
     }
@@ -1306,6 +1306,12 @@ parser_parse_for_statement_start (parser_context_t *context_p) /**< context */
 
         if (context_p->token.type == LEXER_ASSIGN)
         {
+#if ENABLED (JERRY_ES2015)
+          if (context_p->status_flags & PARSER_IS_STRICT)
+          {
+            parser_raise_error (context_p, PARSER_ERR_FOR_IN_OF_DECLARATION);
+          }
+#endif /* ENABLED (JERRY_ES2015) */
           parser_branch_t branch;
 
           /* Initialiser is never executed. */
@@ -1922,13 +1928,13 @@ parser_parse_try_statement_end (parser_context_t *context_p) /**< context */
 #endif /* ENABLED (JERRY_ES2015) */
 
       lexer_next_token (context_p);
+
+#ifndef JERRY_NDEBUG
+      JERRY_ASSERT (block_found);
+#endif /* !JERRY_NDEBUG */
 #if ENABLED (JERRY_ES2015)
     }
 #endif /* ENABLED (JERRY_ES2015) */
-
-#ifndef JERRY_NDEBUG
-    JERRY_ASSERT (block_found);
-#endif /* !JERRY_NDEBUG */
 
     if (context_p->token.type != LEXER_RIGHT_PAREN)
     {
@@ -3044,7 +3050,14 @@ parser_parse_statements (parser_context_t *context_p) /**< context */
           options |= PARSE_EXPR_HAS_LITERAL;
         }
 
-        if (context_p->status_flags & PARSER_IS_FUNCTION)
+#if ENABLED (JERRY_ES2015)
+        bool is_eval = (context_p->status_flags & PARSER_IS_EVAL) != 0;
+#else /* !ENABLED (JERRY_ES2015) */
+        /* In case of ES5.1 it does not matter that this is an eval parsing or not. */
+        bool is_eval = false;
+#endif /* ENABLED (JERRY_ES2015) */
+
+        if ((context_p->status_flags & PARSER_IS_FUNCTION) && !is_eval)
         {
           parser_parse_expression_statement (context_p, options);
         }

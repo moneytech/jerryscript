@@ -332,7 +332,6 @@ ecma_builtin_typedarray_prototype_for_each (ecma_value_t this_arg, /**< this arg
                                                          TYPEDARRAY_ROUTINE_FOREACH);
 } /* ecma_builtin_typedarray_prototype_for_each */
 
-
 #if ENABLED (JERRY_ES2015)
 
 /**
@@ -481,6 +480,7 @@ ecma_builtin_typedarray_prototype_map (ecma_value_t this_arg, /**< this argument
     {
       ecma_free_value (current_index);
       ecma_free_value (get_value);
+      ecma_free_value (new_typedarray);
       return mapped_value;
     }
 
@@ -490,6 +490,7 @@ ecma_builtin_typedarray_prototype_map (ecma_value_t this_arg, /**< this argument
       ecma_free_value (mapped_value);
       ecma_free_value (current_index);
       ecma_free_value (get_value);
+      ecma_free_value (new_typedarray);
       return ECMA_VALUE_ERROR;
     }
     else
@@ -735,10 +736,10 @@ ecma_builtin_typedarray_prototype_filter (ecma_value_t this_arg, /**< this argum
 
     ecma_value_t call_args[] = { get_value, current_index, this_arg };
 
+    ecma_value_t call_value = ecma_op_function_call (func_object_p, cb_this_arg, call_args, 3);
+
     ecma_fast_free_value (current_index);
     ecma_fast_free_value (get_value);
-
-    ecma_value_t call_value = ecma_op_function_call (func_object_p, cb_this_arg, call_args, 3);
 
     if (ECMA_IS_VALUE_ERROR (call_value))
     {
@@ -1740,7 +1741,6 @@ ecma_builtin_typedarray_prototype_index_of (ecma_value_t this_arg, /**< this arg
     from_index = ((num_var >= 0) ? (uint32_t) num_var
                                  : (uint32_t) (info.length + num_var));
   }
-
 
   ecma_number_t search_num = ecma_get_number_from_value (args[0]);
 

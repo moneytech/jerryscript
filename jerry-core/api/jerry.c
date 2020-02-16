@@ -191,7 +191,7 @@ jerry_init (jerry_init_flag_t flags) /**< combination of Jerry flags */
   JERRY_ASSERT (!(JERRY_CONTEXT (status_flags) & ECMA_STATUS_API_AVAILABLE));
 
   /* Zero out all non-external members. */
-  memset (&JERRY_CONTEXT (JERRY_CONTEXT_FIRST_MEMBER), 0,
+  memset ((char *) &JERRY_CONTEXT_STRUCT + offsetof (jerry_context_t, JERRY_CONTEXT_FIRST_MEMBER), 0,
           sizeof (jerry_context_t) - offsetof (jerry_context_t, JERRY_CONTEXT_FIRST_MEMBER));
 
   JERRY_CONTEXT (jerry_init_flags) = flags;
@@ -457,8 +457,7 @@ jerry_parse (const jerry_char_t *resource_name_p, /**< resource name (usually a 
   ecma_free_value (parse_status);
 
   ecma_object_t *lex_env_p = ecma_get_global_environment ();
-  ecma_object_t *func_obj_p = ecma_op_create_function_object (lex_env_p,
-                                                              bytecode_data_p);
+  ecma_object_t *func_obj_p = ecma_op_create_simple_function_object (lex_env_p, bytecode_data_p);
   ecma_bytecode_deref (bytecode_data_p);
 
   return ecma_make_object_value (func_obj_p);
@@ -539,8 +538,7 @@ jerry_parse_function (const jerry_char_t *resource_name_p, /**< resource name (u
   ecma_free_value (parse_status);
 
   ecma_object_t *lex_env_p = ecma_get_global_environment ();
-  ecma_object_t *func_obj_p = ecma_op_create_function_object (lex_env_p,
-                                                              bytecode_data_p);
+  ecma_object_t *func_obj_p = ecma_op_create_simple_function_object (lex_env_p, bytecode_data_p);
   ecma_bytecode_deref (bytecode_data_p);
 
   return ecma_make_object_value (func_obj_p);
@@ -2372,7 +2370,16 @@ jerry_set_internal_property (const jerry_value_t obj_val, /**< object value */
                                                                       ECMA_PROPERTY_CONFIGURABLE_ENUMERABLE_WRITABLE,
                                                                       NULL);
 
-    internal_object_p = ecma_create_object (NULL, 0, ECMA_OBJECT_TYPE_GENERAL);
+    internal_object_p = ecma_create_object (NULL,
+                                            sizeof (ecma_extended_object_t),
+                                            ECMA_OBJECT_TYPE_CLASS);
+    {
+      ecma_extended_object_t *container_p = (ecma_extended_object_t *) internal_object_p;
+      container_p->u.class_prop.class_id = LIT_INTERNAL_MAGIC_STRING_INTERNAL_OBJECT;
+      container_p->u.class_prop.extra_info = 0;
+      container_p->u.class_prop.u.length = 0;
+    }
+
     value_p->value = ecma_make_object_value (internal_object_p);
     ecma_deref_object (internal_object_p);
   }
@@ -2778,6 +2785,9 @@ jerry_get_object_keys (const jerry_value_t obj_val) /**< object value */
 /**
  * Get the prototype of the specified object
  *
+ * Note:
+ *      returned value must be freed with jerry_release_value, when it is no longer needed.
+ *
  * @return prototype object or null value - if success
  *         value marked with error flag - otherwise
  */
@@ -2799,6 +2809,7 @@ jerry_get_prototype (const jerry_value_t obj_val) /**< object value */
   }
 
   ecma_object_t *proto_obj_p = ECMA_GET_NON_NULL_POINTER (ecma_object_t, obj_p->u2.prototype_cp);
+  ecma_ref_object (proto_obj_p);
 
   return ecma_make_object_value (proto_obj_p);
 } /* jerry_get_prototype */
@@ -2836,6 +2847,40 @@ jerry_set_prototype (const jerry_value_t obj_val, /**< object value */
 } /* jerry_set_prototype */
 
 /**
+ * Utility to check if a given object can be used for the foreach api calls.
+ *
+ * Some objects/classes uses extra internal objects to correctly store data.
+ * These extre object should never be exposed externally to the API user.
+ *
+ * @returns true - if the user can access the object in the callback.
+ *          false - if the object is an internal object which should no be accessed by the user.
+ */
+static
+bool jerry_object_is_valid_foreach (ecma_object_t *object_p) /**< object to test */
+{
+  if (ecma_is_lexical_environment (object_p))
+  {
+    return false;
+  }
+
+  ecma_object_type_t object_type = ecma_get_object_type (object_p);
+
+  if (object_type == ECMA_OBJECT_TYPE_CLASS)
+  {
+    ecma_extended_object_t *ext_object_p = (ecma_extended_object_t *) object_p;
+    switch (ext_object_p->u.class_prop.class_id)
+    {
+      /* An object's internal property object should not be iterable by foreach. */
+      case LIT_INTERNAL_MAGIC_STRING_INTERNAL_OBJECT:
+      /* Containers are internal data, do not iterate on them. */
+      case LIT_INTERNAL_MAGIC_STRING_CONTAINER: return false;
+    }
+  }
+
+  return true;
+} /* jerry_object_is_valid_foreach */
+
+/**
  * Traverse objects.
  *
  * @return true - traversal was interrupted by the callback.
@@ -2855,7 +2900,7 @@ jerry_objects_foreach (jerry_objects_foreach_t foreach_p, /**< function pointer 
   {
     ecma_object_t *iter_p = ECMA_GET_NON_NULL_POINTER (ecma_object_t, iter_cp);
 
-    if (!ecma_is_lexical_environment (iter_p)
+    if (jerry_object_is_valid_foreach (iter_p)
         && !foreach_p (ecma_make_object_value (iter_p), user_data_p))
     {
       return true;
@@ -2887,14 +2932,13 @@ jerry_objects_foreach_by_native_info (const jerry_object_native_info_t *native_i
 
   ecma_native_pointer_t *native_pointer_p;
 
-
   jmem_cpointer_t iter_cp = JERRY_CONTEXT (ecma_gc_objects_cp);
 
   while (iter_cp != JMEM_CP_NULL)
   {
     ecma_object_t *iter_p = ECMA_GET_NON_NULL_POINTER (ecma_object_t, iter_cp);
 
-    if (!ecma_is_lexical_environment (iter_p))
+    if (jerry_object_is_valid_foreach (iter_p))
     {
       native_pointer_p = ecma_get_native_pointer_value (iter_p, (void *) native_info_p);
       if (native_pointer_p
@@ -2958,7 +3002,7 @@ jerry_get_object_native_pointer (const jerry_value_t obj_val, /**< object to get
  * Note:
  *      If a non-NULL free callback is specified in the native type info,
  *      it will be called by the garbage collector when the object is freed.
- *      This callback **must not** invoke API functions.
+ *      Referred values by this method must have at least 1 reference. (Correct API usage satisfies this condition)
  *      The type info always overwrites the previous value, so passing
  *      a NULL value deletes the current type info.
  */
@@ -3396,6 +3440,34 @@ jerry_get_resource_name (const jerry_value_t value) /**< jerry api value */
   JERRY_UNUSED (value);
   return ecma_make_magic_string_value (LIT_MAGIC_STRING_RESOURCE_ANON);
 } /* jerry_get_resource_name */
+
+/**
+ * Access the "new.target" value.
+ *
+ * The "new.target" value depends on the current call site. That is
+ * this method will only have a function object result if, at the call site
+ * it was called inside a constructor method invoked with "new".
+ *
+ * @return "undefined" - if at the call site it was not a constructor call.
+ *         function object - if the current call site is in a constructor call.
+ */
+jerry_value_t
+jerry_get_new_target (void)
+{
+#if ENABLED (JERRY_ES2015)
+  ecma_object_t *current_new_target = JERRY_CONTEXT (current_new_target);
+
+  if (current_new_target == NULL || current_new_target == JERRY_CONTEXT_INVALID_NEW_TARGET)
+  {
+    return jerry_create_undefined ();
+  }
+
+  ecma_ref_object (current_new_target);
+  return ecma_make_object_value (current_new_target);
+#else /* !ENABLED (JERRY_ES2015) */
+  return jerry_create_undefined ();
+#endif /* ENABLED (JERRY_ES2015) */
+} /* jerry_get_new_target */
 
 /**
  * Check if the given value is an ArrayBuffer object.
